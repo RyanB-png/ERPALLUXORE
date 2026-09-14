@@ -1,0 +1,10 @@
+Django>=5.2
+djangorestframework
+psycopg[binary]
+django-cors-headers
+python-dotenv
+
+django-filter
+
+drf-spectacular
+Pillow

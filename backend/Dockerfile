@@ -1,0 +1,6 @@
+FROM python:3.13-slim
+WORKDIR /app
+COPY requirements/base.txt .
+RUN pip install --no-cache-dir -r base.txt
+COPY src .
+CMD ["python","manage.py","runserver","0.0.0.0:8000"]

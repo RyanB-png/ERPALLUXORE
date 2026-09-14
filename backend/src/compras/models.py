@@ -1,0 +1,99 @@
+from django.db import models
+from django.core.exceptions import ValidationError
+from core.models import BaseModel
+from lotes.models import Lote
+from laboratorio.models import Elemento 
+
+
+class Compra(BaseModel):
+    ESTADO_CHOICES=[
+        ("NEGOCIACION","En Negociacion"),
+        ("LIQUIDADA","Liquidada"),
+        ("PAGO_PARCIAL","Con Pago Parcial"),
+        ("PAGADA","Pagada Totalmente"),
+        ("CERRADA","Cerrada"),
+        
+    ]
+
+    MONEDA_CHOICES=[
+        ("BOB","Bolivianos"),
+        ("USD","Dolares"),
+        
+    ]
+
+    lote = models.OneToOneField(
+        Lote, 
+        on_delete=models.PROTECT,
+        related_name="compra",
+    )
+    fecha_negociacion = models.DateField()
+    moneda= models.CharField(max_length=3, choices=MONEDA_CHOICES, default="USD")
+    tipo_cambio= models.DecimalField(max_digits=8,decimal_places=4, default=1)
+
+    valor_bruto= models.DecimalField(max_digits=14, decimal_places=2)
+    valor_neto= models.DecimalField(max_digits=14, decimal_places=2)
+    monto_usd= models.DecimalField(max_digits=14, decimal_places=2)
+    monto_bs= models.DecimalField(max_digits=14, decimal_places=2)
+    
+    estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default="NEGOCIACION")
+    condiciones = models.TextField(blank=True)
+    observaciones= models.TextField(blank=True)
+
+    class Meta:
+        verbose_name="Compra"
+        verbose_name_plural="Compras"
+        ordering=["-fecha_negociacion"]
+    
+    @property
+    def monto_pagado(self):
+        return sum(p.monto for p in self.pagos_aplicados.all())
+
+    @property
+    def saldo_pendiente(self):
+        return self.valor_neto - self.monto_pagado
+
+    def __str__(self): 
+        return f"Compra {self.lote.codigo} - {self.valor_neto} {self.moneda}"
+
+
+class PagoCompra(BaseModel):
+    TIPO_ORIGEN_CHOICES = [
+        ("Anticipo","Aplicacion de Anticipo"),
+        ("MOVIMIENTO", "PAgo Directo (Movimiento Financiero)"),
+    ]
+
+    compra = models.ForeignKey(
+        Compra,
+        on_delete= models.PROTECT,
+        related_name="pagos_aplicados",
+    )
+
+    tipo_origen=models.CharField(max_length=12, choices=TIPO_ORIGEN_CHOICES)
+
+    aplicacion_anticipo= models.OneToOneField(
+        "finanzas.AplicacionAnticipo",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="pago_compra",
+
+    )
+    monto=models.DecimalField(max_digits=14, decimal_places=2)
+    fecha= models.DateField()
+
+    class Meta:
+        verbose_name="Pago de Compra"
+        verbose_name_plural="Pagos de Compra"
+        ordering=["-fecha"]
+    
+    def clean(self):
+        if self.tipo_origen=="ANTICIPO" and not self.aplicacion_anticipo:
+            raise ValidationError("Debe seleccionar la aplicación de de nticipo correspondiente")
+        
+        if self.tipo_origen=="Movimiento" and not self.movimiento:
+            raise ValidationError("Debe seleecionar el movimiento financiero correspondiente")
+        if self.aplicacion_anticipo and self.movimiento:
+            raise ValidationError("Un pago no puee tener anticipo y movimiento a la vez")
+
+    def __str__(self):
+        return f"Pago{self.monto}-{self.compra}"
