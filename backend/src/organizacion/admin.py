@@ -16,12 +16,12 @@ class SucursalAdmin(admin.ModelAdmin):
 
 @admin.register(Caja)
 class CajaAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "empresa", "moneda", "saldo_actual", "is_active")
+    list_display = ("nombre", "empresa", "moneda", "saldo_actual", "cuenta_contable", "is_active")
     list_filter = ("empresa", "moneda")
 
 
 @admin.register(CuentaBancaria)
 class CuentaBancariaAdmin(admin.ModelAdmin):
-    list_display = ("banco", "numero_cuenta", "empresa", "moneda", "saldo_actual", "is_active")
+    list_display = ("banco", "numero_cuenta", "empresa", "moneda", "saldo_actual", "cuenta_contable", "is_active")
     list_filter = ("empresa", "banco", "moneda")
     search_fields = ("numero_cuenta", "banco")

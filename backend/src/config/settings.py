@@ -35,6 +35,13 @@ INSTALLED_APPS = [
     'laboratorio',
     'finanzas',
     'compras',
+    'liquidaciones',
+    'gastos',
+    'ventas',
+    'inventarios',
+    'exportaciones',
+    'activos',
+    'documentos',
     'contabilidad',
 ]
 

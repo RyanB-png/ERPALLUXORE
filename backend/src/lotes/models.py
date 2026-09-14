@@ -102,6 +102,8 @@ class Lote(BaseModel):
         ordering = ["-fecha_recepcion"]
 
     def clean(self):
+        if self.tara is None or self.peso_bruto is None:
+            return
         if self.tara >= self.peso_bruto:
             raise ValidationError("La tara no puede ser mayor o igual al peso bruto.")
 

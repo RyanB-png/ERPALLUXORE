@@ -25,8 +25,21 @@ class Laboratorio(BaseModel):
 
 
 class Elemento(BaseModel):
+    UNIDAD_LEY_CHOICES = [
+        ("PORCENTAJE", "Porcentaje (%)"),
+        ("GRAMO_TONELADA", "Gramos por tonelada (g/t)"),
+        ("ONZA_TONELADA", "Onzas troy por tonelada (oz/t)"),
+    ]
+
     simbolo = models.CharField(max_length=10, unique=True)
     nombre = models.CharField(max_length=50)
+    unidad_ley = models.CharField(
+        max_length=20,
+        choices=UNIDAD_LEY_CHOICES,
+        default="PORCENTAJE",
+        help_text="Unidad en que se reporta la ley de este elemento. "
+                  "Zn/Pb suelen ir en %, Ag/Au en g/t u oz/t.",
+    )
 
     class Meta:
         verbose_name = "Elemento"

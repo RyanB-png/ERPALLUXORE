@@ -1,9 +1,9 @@
 from django.apps import AppConfig
 
 
-class ContabilidadConfig(AppConfig):
+class InventariosConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "contabilidad"
+    name = "inventarios"
 
     def ready(self):
-        import contabilidad.signals  # noqa
+        import inventarios.signals  # noqa

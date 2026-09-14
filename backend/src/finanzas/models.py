@@ -63,7 +63,7 @@ class MovimientoFinanciero(BaseModel):
                 f"la cuenta/caja ({cuenta_origen.moneda})."
             )
 
-        if self.tipo == "EGRESO" and cuenta_origen:
+        if self.tipo == "EGRESO" and cuenta_origen and self.monto is not None:
             if self.monto > cuenta_origen.saldo_actual:
                 raise ValidationError(
                     f"Saldo insuficiente. Disponible: {cuenta_origen.saldo_actual} {cuenta_origen.moneda}"
@@ -119,7 +119,7 @@ class TransferenciaEntreCuentas(BaseModel):
             raise ValidationError("Debe seleccionar una cuenta bancaria de destino.")
 
         origen = self.origen_caja or self.origen_cuenta
-        if origen and self.monto > origen.saldo_actual:
+        if origen and self.monto is not None and self.monto > origen.saldo_actual:
             raise ValidationError(
                 f"Saldo insuficiente en origen. Disponible: {origen.saldo_actual} {origen.moneda}"
             )
@@ -192,6 +192,8 @@ class AplicacionAnticipo(BaseModel):
         ordering = ["-fecha", "-created_at"]
 
     def clean(self):
+        if self.monto is None or not self.anticipo_id:
+            return
         if self.monto > self.anticipo.saldo_disponible:
             raise ValidationError("El monto a aplicar supera el saldo disponible del anticipo.")
 

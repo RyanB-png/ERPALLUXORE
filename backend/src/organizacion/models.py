@@ -51,6 +51,15 @@ class Caja(BaseModel):
     )
     saldo_actual = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
+    cuenta_contable = models.ForeignKey(
+        "contabilidad.CuentaContable",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="cajas_asociadas",
+        help_text="Cuenta del plan contable que representa este saldo. "
+                  "Necesaria para generar asientos automaticos.",
+    )
 
     class Meta:
         verbose_name = "Caja"
@@ -76,6 +85,15 @@ class CuentaBancaria(BaseModel):
     )
     saldo_actual = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
+    cuenta_contable = models.ForeignKey(
+        "contabilidad.CuentaContable",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="cuentas_bancarias_asociadas",
+        help_text="Cuenta del plan contable que representa este saldo. "
+                  "Necesaria para generar asientos automaticos.",
+    )
 
     class Meta:
         verbose_name = "Cuenta Bancaria"

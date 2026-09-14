@@ -31,7 +31,8 @@ class Usuario(AbstractUser):
         related_name="usuarios",
     )
     class Meta:
-        verbose_name= "Usuario",
-        verbose_name_plural= "Usuarios"
+        verbose_name = "Usuario"
+        verbose_name_plural = "Usuarios"
+
     def __str__(self):
         return f"{self.get_full_name() or self.username} ({self.get_rol_display()})"

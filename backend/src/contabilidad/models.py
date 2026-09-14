@@ -1,6 +1,41 @@
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.core.exceptions import ValidationError
 from core.models import BaseModel
+
+
+class CentroCosto(BaseModel):
+    """
+    Unidad a la que se imputan gastos e ingresos para saber donde se genera
+    el costo (secciones 5 y 13 del esquema): una mina, un vehiculo, el area
+    administrativa, una operacion de exportacion.
+
+    Es jerarquico igual que el plan de cuentas: un centro puede agrupar otros
+    (por ejemplo "Operaciones" agrupando "Transporte" y "Planta").
+    """
+
+    codigo = models.CharField(max_length=20, unique=True)
+    nombre = models.CharField(max_length=150)
+    descripcion = models.TextField(blank=True)
+
+    centro_padre = models.ForeignKey(
+        "self", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="subcentros",
+    )
+
+    permite_imputacion = models.BooleanField(
+        default=True,
+        help_text="Si esta desmarcado, el centro solo agrupa y no recibe cargos directos.",
+    )
+
+    class Meta:
+        verbose_name = "Centro de Costo"
+        verbose_name_plural = "Centros de Costo"
+        ordering = ["codigo"]
+
+    def __str__(self):
+        return f"{self.codigo} - {self.nombre}"
 
 
 class CuentaContable(BaseModel):
@@ -59,6 +94,70 @@ class PeriodoContable(BaseModel):
         return f"{self.mes:02d}/{self.anio} ({self.get_estado_display()})"
 
 
+class ConfiguracionContable(BaseModel):
+    """
+    Dice que cuenta usar en cada tipo de operacion, para poder generar los
+    asientos solos. Sin esto, el sistema no tiene forma de saber que una compra
+    de mineral va contra "Inventario" y "Cuentas por Pagar".
+
+    Es un registro unico (singleton): se crea uno y se edita desde el admin.
+    Las cuentas de caja y banco NO van aqui — cada Caja y CuentaBancaria tiene
+    la suya, porque cada una es una cuenta contable distinta.
+    """
+
+    inventario_mineral = models.ForeignKey(
+        CuentaContable, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="config_inventario",
+        help_text="Activo. Se debita al registrar una compra de mineral.",
+    )
+    cuentas_por_pagar = models.ForeignKey(
+        CuentaContable, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="config_cxp",
+        help_text="Pasivo. Se acredita al comprar y se debita al pagar.",
+    )
+    cuentas_por_cobrar = models.ForeignKey(
+        CuentaContable, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="config_cxc",
+        help_text="Activo. Se debita al vender y se acredita al cobrar.",
+    )
+    ventas = models.ForeignKey(
+        CuentaContable, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="config_ventas",
+        help_text="Ingreso. Se acredita al registrar una venta.",
+    )
+    anticipos_proveedores = models.ForeignKey(
+        CuentaContable, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="config_anticipos",
+        help_text="Activo. Se debita al entregar un anticipo a un proveedor.",
+    )
+    ingresos_varios = models.ForeignKey(
+        CuentaContable, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="config_ingresos_varios",
+        help_text="Ingreso por defecto para movimientos de caja sin documento asociado.",
+    )
+    egresos_varios = models.ForeignKey(
+        CuentaContable, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="config_egresos_varios",
+        help_text="Gasto por defecto para egresos sin categoria ni documento.",
+    )
+
+    generar_asientos_automaticos = models.BooleanField(
+        default=True,
+        help_text="Si se desmarca, el sistema deja de generar asientos solo.",
+    )
+
+    class Meta:
+        verbose_name = "Configuración Contable"
+        verbose_name_plural = "Configuración Contable"
+
+    @classmethod
+    def vigente(cls):
+        return cls.objects.filter(is_active=True).first()
+
+    def __str__(self):
+        return "Configuración contable"
+
+
 class Asiento(BaseModel):
     numero = models.CharField(max_length=30, unique=True, blank=True, editable=False)
     fecha = models.DateField()
@@ -69,12 +168,32 @@ class Asiento(BaseModel):
     concepto = models.CharField(max_length=255)
     observaciones = models.TextField(blank=True)
 
+    automatico = models.BooleanField(
+        default=False, editable=False,
+        help_text="Generado por el sistema a partir de una operacion.",
+    )
+    origen_content_type = models.ForeignKey(
+        ContentType, on_delete=models.SET_NULL, null=True, blank=True,
+        editable=False, related_name="asientos_originados",
+    )
+    origen_object_id = models.UUIDField(null=True, blank=True, editable=False)
+    origen = GenericForeignKey("origen_content_type", "origen_object_id")
+
     class Meta:
         verbose_name = "Asiento Contable"
         verbose_name_plural = "Asientos Contables"
         ordering = ["-fecha", "-numero"]
+        indexes = [
+            models.Index(fields=["origen_content_type", "origen_object_id"]),
+        ]
 
     def clean(self):
+        # Django llama a clean() aunque la validacion de campos ya haya fallado,
+        # asi que los campos obligatorios pueden venir vacios. Si falta la fecha,
+        # se sale: el error de "campo obligatorio" ya lo reporta Django.
+        if not self.fecha:
+            return
+
         periodo = PeriodoContable.objects.filter(
             anio=self.fecha.year, mes=self.fecha.month
         ).first()
@@ -123,6 +242,11 @@ class LineaAsiento(BaseModel):
     cuenta = models.ForeignKey(
         CuentaContable, on_delete=models.PROTECT, related_name="lineas_asiento",
     )
+    centro_costo = models.ForeignKey(
+        CentroCosto, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="lineas_asiento",
+        help_text="Opcional. Necesario para los reportes por centro de costo.",
+    )
     debe = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     haber = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     glosa = models.CharField(max_length=255, blank=True)
@@ -138,6 +262,10 @@ class LineaAsiento(BaseModel):
             raise ValidationError("Debe ingresar un valor en Debe o en Haber.")
         if not self.cuenta.permite_movimiento:
             raise ValidationError(f"La cuenta {self.cuenta} no permite movimientos directos (es un agrupador).")
+        if self.centro_costo and not self.centro_costo.permite_imputacion:
+            raise ValidationError(
+                f"El centro de costo {self.centro_costo} no permite imputacion directa (es un agrupador)."
+            )
 
     def __str__(self):
         lado = "Debe" if self.debe else "Haber"
